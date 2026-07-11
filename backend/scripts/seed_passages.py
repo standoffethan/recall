@@ -5,6 +5,7 @@ import json
 import random
 import requests
 import psycopg2
+import unicodedata
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://appuser:apppass@localhost:5433/appdb"
@@ -21,16 +22,45 @@ PASSAGES_PER_BOOK_PER_LENGTH = 1
 
 API_URL = "https://datasets-server.huggingface.co/rows"
 
-
 def clean_text(text):
-    return re.sub(r"\s+", " ", text).strip()
+    # Normalize unicode (e.g. combine accented chars, fix odd encodings)
+    text = unicodedata.normalize("NFKC", text)
+
+    # Normalize all line-ending variants to a single space
+    text = text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+
+    # Strip control characters (non-printable), keep normal punctuation/letters
+    text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
+
+    # Collapse multiple spaces/tabs into one
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
 
 
-def random_chunk(words, length):
-    if len(words) < length:
+def split_sentences(text):
+    # Splits after ., !, or ? followed by whitespace
+    return re.split(r"(?<=[.!?])\s+", text)
+
+
+def build_passage(sentences, target_length):
+    if not sentences:
         return None
-    start = random.randint(0, len(words) - length)
-    return " ".join(words[start:start + length])
+
+    start = random.randint(0, len(sentences) - 1)
+    chosen = []
+    word_count = 0
+
+    for sentence in sentences[start:]:
+        chosen.append(sentence)
+        word_count += len(sentence.split())
+        if word_count >= target_length:
+            break
+
+    if word_count < target_length * 0.5:
+        return None
+
+    return " ".join(chosen), word_count
 
 def fetch_rows(offset, length, max_retries=5):
     params = {
@@ -87,16 +117,18 @@ def main():
             if not title or not author:
                 continue
 
-            words = clean_text(text_raw).split(" ")
+            cleaned = clean_text(text_raw)
+            sentences = split_sentences(cleaned)
 
-            for length in TARGET_LENGTHS:
+            for target_length in TARGET_LENGTHS:
                 for _ in range(PASSAGES_PER_BOOK_PER_LENGTH):
-                    chunk = random_chunk(words, length)
-                    if chunk:
+                    result = build_passage(sentences, target_length)
+                    if result:
+                        passage_text, actual_length = result
                         cur.execute(
                             """INSERT INTO passages (title, author, text, length)
                                VALUES (%s, %s, %s, %s)""",
-                            (title, author, chunk, length),
+                            (title, author, passage_text, actual_length),
                         )
                         passages_inserted += 1
 
