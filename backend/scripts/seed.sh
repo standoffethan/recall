@@ -1,0 +1,1 @@
+DATABASE_URL=postgresql://appuser:apppass@localhost:5433/appdb python seed_passages.py
