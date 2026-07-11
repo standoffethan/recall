@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/navigation.xml"
+    app:startDestination="@id/taskFragment">
+
+    <fragment
+        android:id="@+id/statFragment"
+        android:name="com.example.memory_app_bloom.statFragment"
+        android:label="fragment_playing"
+        tools:layout="@layout/fragment_stat" >
+        <action
+            android:id="@+id/action_playingFragment_to_taskFragment"
+            app:destination="@id/taskFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/settings"
+        android:name="com.example.memory_app_bloom.Settings"
+        android:label="fragment_settings"
+        tools:layout="@layout/fragment_settings" >
+        <action
+            android:id="@+id/action_settings_to_taskFragment"
+            app:destination="@id/taskFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/taskFragment"
+        android:name="com.example.memory_app_bloom.TaskFragment"
+        android:label="fragment_task"
+        tools:layout="@layout/fragment_task" >
+        <action
+            android:id="@+id/action_taskFragment_to_playingFragment"
+            app:destination="@id/statFragment" />
+        <action
+            android:id="@+id/action_taskFragment_to_settings"
+            app:destination="@id/settings" />
+    </fragment>
+</navigation>
