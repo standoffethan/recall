@@ -1,2 +1,2 @@
-datasets
+requests
 psycopg2-binary
