@@ -1,4 +1,6 @@
 import os
+import random
+from google import genai
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 
@@ -8,7 +10,12 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
+#Get Gemini API client
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
+
+
+#DATABASE TABLE CLASSES
 class User(db.Model):
     __tablename__ = "users"
 
@@ -61,20 +68,26 @@ class Passage(db.Model):
         }
 
 
+
 @app.route("/book")
 def get_passage():
+    response = client.models.generate_content(
+
+    )
+    
     length = request.args.get("length", type=int, default=100)
 
-    passage = (
+    candidates = (
         Passage.query
-        .filter_by(length=length)
-        .order_by(db.func.random())
-        .first()
+        .order_by(db.func.abs(Passage.length - length))
+        .limit(20)
+        .all()
     )
 
-    if not passage:
-        return jsonify({"error": f"no passage found for length={length}"}), 404
+    if not candidates:
+        return jsonify({"error": "no passages available"}), 404
 
+    passage = random.choice(candidates)
     return jsonify(passage.to_dict())
 
 
