@@ -3,6 +3,7 @@ import io
 import wave
 import random
 import base64
+import json
 from google import genai
 from google.genai import types
 from flask import Flask, jsonify, request, send_file
@@ -126,4 +127,67 @@ def get_book_audio():
         "text": passage.text,
         "length": passage.length,
         "audio_base64": audio_base64,
+    })
+
+@app.route("/questions/<int:passage_id>")
+def get_questions(passage_id):
+    passage = Passage.query.get_or_404(passage_id)
+    num_questions = request.args.get("count", type=int, default=5)
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": {"type": "string"},
+                        "type": {
+                            "type": "string",
+                            "enum": ["multiple_choice", "short_answer"],
+                        },
+                        "options": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "answer": {"type": "string"},
+                    },
+                    "required": ["question", "type", "answer"],
+                },
+            }
+        },
+        "required": ["questions"],
+    }
+
+    prompt = f"""Based on the following passage, generate {num_questions} comprehension questions.
+
+Mix question types: some multiple_choice (with exactly 4 short "options" including the correct one), some short_answer (answerable in one word or a very short phrase).
+
+For multiple_choice questions, include an "options" array. For short_answer questions, omit "options" or leave it empty.
+
+The "answer" field must always be the exact correct answer, as a string, in a form that could be directly string-compared against a user's typed response.
+
+Passage:
+\"\"\"
+{passage.text}
+\"\"\"
+"""
+
+    response = client.models.generate_content(
+        model="gemini-3.1-flash-lite",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+        ),
+    )
+
+    result = json.loads(response.text)
+
+    return jsonify({
+        "passage_id": passage.id,
+        "title": passage.title,
+        "author": passage.author,
+        "questions": result["questions"],
     })
