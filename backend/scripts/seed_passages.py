@@ -3,43 +3,35 @@ import time
 import re
 import json
 import random
-import requests
 import psycopg2
 import unicodedata
+from datasets import load_dataset
 
+# Database URL from environment variable
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://appuser:apppass@localhost:5433/appdb"
 )
 
+# Hugging Face dataset info
 DATASET = "sedthh/gutenberg_english"
 CONFIG = "default"
 SPLIT = "train"
-BATCH_SIZE = 20        # rows fetched per HTTP request — small and light
-MAX_BOOKS = 200         # start small; bump up later once this works
 
+# Processing parameters
+MAX_BOOKS = 200
 TARGET_LENGTHS = [100, 150, 200, 250, 300, 350, 400, 500, 600]
 PASSAGES_PER_BOOK_PER_LENGTH = 1
 
-API_URL = "https://datasets-server.huggingface.co/rows"
 
 def clean_text(text):
-    # Normalize unicode (e.g. combine accented chars, fix odd encodings)
     text = unicodedata.normalize("NFKC", text)
-
-    # Normalize all line-ending variants to a single space
     text = text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
-
-    # Strip control characters (non-printable), keep normal punctuation/letters
     text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
-
-    # Collapse multiple spaces/tabs into one
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 
 def split_sentences(text):
-    # Splits after ., !, or ? followed by whitespace
     return re.split(r"(?<=[.!?])\s+", text)
 
 
@@ -62,85 +54,58 @@ def build_passage(sentences, target_length):
 
     return " ".join(chosen), word_count
 
-def fetch_rows(offset, length, max_retries=5):
-    params = {
-        "dataset": DATASET,
-        "config": CONFIG,
-        "split": SPLIT,
-        "offset": offset,
-        "length": length,
-    }
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.get(API_URL, params=params, timeout=30)
-            resp.raise_for_status()
-            return resp.json()["rows"]
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else None
-            if status in (502, 503, 504) and attempt < max_retries:
-                wait = attempt * 2
-                print(f"  Got {status}, retrying in {wait}s (attempt {attempt}/{max_retries})...")
-                time.sleep(wait)
-                continue
-            raise
 
 def main():
+    print("Loading dataset from Hugging Face...")
+    dataset = load_dataset(DATASET, CONFIG, split="train[:5%]") #download 5% of the dataset for speed
+
     print("Connecting to Postgres...")
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
 
     processed = 0
     passages_inserted = 0
-    offset = 0
 
-    while processed < MAX_BOOKS:
-        print(f"Fetching rows {offset} to {offset + BATCH_SIZE}...")
-        rows = fetch_rows(offset, BATCH_SIZE)
-        if not rows:
-            print("No more rows available.")
+    for entry in dataset:
+        if processed >= MAX_BOOKS:
             break
 
-        for entry in rows:
-            row = entry["row"]
-            meta_raw = row.get("METADATA")
-            text_raw = row.get("TEXT")
-            if not meta_raw or not text_raw:
-                continue
+        # HF dataset rows are direct dicts
+        meta_raw = entry.get("METADATA")
+        text_raw = entry.get("TEXT")
 
-            try:
-                meta = json.loads(meta_raw)
-            except (json.JSONDecodeError, TypeError):
-                continue
+        if not meta_raw or not text_raw:
+            continue
 
-            title = meta.get("title")
-            author = meta.get("authors")
-            if not title or not author:
-                continue
+        try:
+            meta = json.loads(meta_raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
 
-            cleaned = clean_text(text_raw)
-            sentences = split_sentences(cleaned)
+        title = meta.get("title")
+        author = meta.get("authors")
+        if not title or not author:
+            continue
 
-            for target_length in TARGET_LENGTHS:
-                for _ in range(PASSAGES_PER_BOOK_PER_LENGTH):
-                    result = build_passage(sentences, target_length)
-                    if result:
-                        passage_text, actual_length = result
-                        cur.execute(
-                            """INSERT INTO passages (title, author, text, length)
-                               VALUES (%s, %s, %s, %s)""",
-                            (title, author, passage_text, actual_length),
-                        )
-                        passages_inserted += 1
+        cleaned = clean_text(text_raw)
+        sentences = split_sentences(cleaned)
 
-            processed += 1
-            print(f"[{processed}/{MAX_BOOKS}] {title} — {author}")
-            conn.commit()
-            print(f"  Committed after: {title}")
+        for target_length in TARGET_LENGTHS:
+            for _ in range(PASSAGES_PER_BOOK_PER_LENGTH):
+                result = build_passage(sentences, target_length)
+                if result:
+                    passage_text, actual_length = result
+                    cur.execute(
+                        """INSERT INTO passages (title, author, text, length)
+                           VALUES (%s, %s, %s, %s)""",
+                        (title, author, passage_text, actual_length),
+                    )
+                    passages_inserted += 1
 
-            if processed >= MAX_BOOKS:
-                break
-
-        offset += BATCH_SIZE
+        processed += 1
+        print(f"[{processed}/{MAX_BOOKS}] {title} — {author}")
+        conn.commit()
+        print(f"  Committed after: {title}")
 
     cur.close()
     conn.close()
