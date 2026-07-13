@@ -26,8 +26,8 @@ GEMINI_API_KEY=[Your API key]
 5. Navigate to the scripts directory  
 6. create a python venv by: python -m venv venv  
 7. activate the virtual environment by running: venv\Scripts\activate
+8. Download script dependencies by running: pip install -r requirements.txt
+9. run the seed.sh shell file
+10. run: deactivate
 
-8. You can then download the zip file with our android project in it, unzip it and open it in android studio. You should then be able to run the app in the emulator.
-9. Download script dependencies by running: pip install -r requirements.txt
-10. run the seed.sh shell file
-11. run: deactivate
+You can then download the zip file with our android project in it, unzip it and open it in android studio. You should then be able to run the app in the emulator.
