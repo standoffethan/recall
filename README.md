@@ -3,6 +3,8 @@
 See detais about our project on our DevPost here:  
 https://devpost.com/software/recall-93a6j5
 
+---
+
 Instructions to start the backend:  
 ---------------------WINDOWS-----------------------  
 1. open Docker Desktop  
@@ -32,5 +34,7 @@ GEMINI_API_KEY=[Your API key]
 8. Download script dependencies by running: pip install -r requirements.txt
 9. run the seed.sh shell file
 10. run: deactivate
+
+---
 
 You can then download the zip file with our android project in it, unzip it and open it in android studio. You should then be able to run the app in the emulator.
