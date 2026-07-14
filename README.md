@@ -1,5 +1,8 @@
 # memory_app_bloom
 
+See detais about our project on our DevPost here:  
+https://devpost.com/software/recall-93a6j5
+
 Instructions to start the backend:  
 ---------------------WINDOWS-----------------------  
 1. open Docker Desktop  
